@@ -58,6 +58,17 @@ func (ph *PaymentsHandler) PostHandler() http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
 
+		// If this request is coming twice with same idempotency key
+		// fetch from db and return it
+		idempotencyKey := r.Header.Get("Idempotency-Key")
+
+		if cached := ph.storage.GetByIdempotencyKey(idempotencyKey); cached != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(cached)
+			return
+		}
+
 		var request models.PostPaymentRequest
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 			writeRejected(w, []models.FieldError{{Field: "body", Message: "invalid json"}})
@@ -106,6 +117,7 @@ func (ph *PaymentsHandler) PostHandler() http.HandlerFunc {
 		}
 
 		ph.storage.AddPayment(payment)
+		ph.storage.AddIdempotencyKey(idempotencyKey, payment)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)

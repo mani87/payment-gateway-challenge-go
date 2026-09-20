@@ -9,12 +9,42 @@ import (
 type PaymentsRepository struct {
 	mu       sync.RWMutex
 	payments map[string]models.PostPaymentResponse
+
+	// This can be a col in real DB and indexed as well!
+	idempotency map[string]models.PostPaymentResponse
 }
 
 func NewPaymentsRepository() *PaymentsRepository {
 	return &PaymentsRepository{
-		payments: make(map[string]models.PostPaymentResponse),
+		payments:    make(map[string]models.PostPaymentResponse),
+		idempotency: make(map[string]models.PostPaymentResponse),
 	}
+}
+
+// nil if key is empty or unseen
+func (ps *PaymentsRepository) GetByIdempotencyKey(key string) *models.PostPaymentResponse {
+	if key == "" {
+		return nil
+	}
+
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
+
+	p, ok := ps.idempotency[key]
+	if !ok {
+		return nil
+	}
+	return &p
+}
+
+// save record to corresponding idempotent key
+func (ps *PaymentsRepository) AddIdempotencyKey(key string, payment models.PostPaymentResponse) {
+	if key == "" {
+		return
+	}
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	ps.idempotency[key] = payment
 }
 
 func (ps *PaymentsRepository) GetPayment(id string) *models.PostPaymentResponse {
