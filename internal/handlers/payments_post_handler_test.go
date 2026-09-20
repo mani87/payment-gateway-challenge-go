@@ -131,3 +131,36 @@ func TestPostHandler_ResponseNeverLeaksFullCardOrCvv(t *testing.T) {
 	assert.NotContains(t, rr.Body.String(), body.CardNumber)
 	assert.NotContains(t, rr.Body.String(), body.Cvv)
 }
+
+func TestPostHandler_IdempotencyKey_ReplaysOriginalResponse(t *testing.T) {
+	fb := &fakeBank{response: &bank.BankPaymentResponse{Authorized: true}}
+	repo := repository.NewPaymentsRepository()
+	h := NewPaymentsHandler(repo, fb)
+
+	body, err := json.Marshal(validRequestBody())
+	assert.NoError(t, err)
+
+	doWithKey := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest("POST", "/api/payments", bytes.NewReader(body))
+		req.Header.Set("Idempotency-Key", "test-key-123")
+		rr := httptest.NewRecorder()
+		h.PostHandler()(rr, req)
+		return rr
+	}
+
+	first := doWithKey()
+	assert.Equal(t, 201, first.Code)
+
+	var firstResp models.PostPaymentResponse
+	assert.NoError(t, json.Unmarshal(first.Body.Bytes(), &firstResp))
+
+	second := doWithKey()
+	assert.Equal(t, 200, second.Code, "replay should not report a new creation")
+
+	var secondResp models.PostPaymentResponse
+	assert.NoError(t, json.Unmarshal(second.Body.Bytes(), &secondResp))
+
+	assert.Equal(t, firstResp.Id, secondResp.Id, "same key must return the same payment, not a new one")
+	assert.Equal(t, 1, fb.calls, "bank must only be charged once for a replayed key")
+	assert.Len(t, repo.All(), 1, "only one payment should ever be persisted for this key")
+}
