@@ -1,28 +1,48 @@
 package repository
 
 import (
+	"sync"
+
 	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/models"
 )
 
 type PaymentsRepository struct {
-	payments []models.PostPaymentResponse
+	mu       sync.RWMutex
+	payments map[string]models.PostPaymentResponse
 }
 
 func NewPaymentsRepository() *PaymentsRepository {
 	return &PaymentsRepository{
-		payments: []models.PostPaymentResponse{},
+		payments: make(map[string]models.PostPaymentResponse),
 	}
 }
 
 func (ps *PaymentsRepository) GetPayment(id string) *models.PostPaymentResponse {
-	for _, element := range ps.payments {
-		if element.Id == id {
-			return &element
-		}
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
+
+	p, ok := ps.payments[id]
+	if !ok {
+		return nil
 	}
-	return nil
+	return &p
 }
 
 func (ps *PaymentsRepository) AddPayment(payment models.PostPaymentResponse) {
-	ps.payments = append(ps.payments, payment)
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	ps.payments[payment.Id] = payment
+}
+
+// All returns every stored payment. Used by tests to assert on the
+// total count — not needed by the handler itself.
+func (ps *PaymentsRepository) All() []models.PostPaymentResponse {
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
+
+	out := make([]models.PostPaymentResponse, 0, len(ps.payments))
+	for _, p := range ps.payments {
+		out = append(out, p)
+	}
+	return out
 }

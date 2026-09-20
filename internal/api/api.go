@@ -6,6 +6,8 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/bank"
+	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/handlers"
 	"github.com/cko-recruitment/payment-gateway-challenge-go/internal/repository"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -15,11 +17,13 @@ import (
 type Api struct {
 	router       *chi.Mux
 	paymentsRepo *repository.PaymentsRepository
+	bankClient   *bank.Client
 }
 
 func New() *Api {
 	a := &Api{}
 	a.paymentsRepo = repository.NewPaymentsRepository()
+	a.bankClient = bank.NewClient("http://localhost:8080")
 	a.setupRouter()
 
 	return a
@@ -60,5 +64,8 @@ func (a *Api) setupRouter() {
 	a.router.Get("/ping", a.PingHandler())
 	a.router.Get("/swagger/*", a.SwaggerHandler())
 
-	a.router.Get("/api/payments/{id}", a.GetPaymentHandler())
+	h := handlers.NewPaymentsHandler(a.paymentsRepo, a.bankClient)
+
+	a.router.Get("/api/payments/{id}", h.GetHandler())
+	a.router.Post("/api/payments", h.PostHandler())
 }
