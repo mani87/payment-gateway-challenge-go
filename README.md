@@ -119,9 +119,3 @@ The `BankClient` interface is defined in `handlers`, where it's consumed, rather
 next to its implementation in `bank`. This is what lets the handler tests run against
 a fake bank with no network calls at all, while the `bank` package's own tests exercise
 the real client against a local `httptest` server.
-
-# Instructions for candidates
-
-This is the Go version of the Payment Gateway challenge. If you haven't already read
-the [README.md](https://github.com/cko-recruitment/) in the root of this organisation,
-please do so now.
